@@ -37,20 +37,23 @@ function App() {
                 required
               />
             </div>
-            <button type="submit" className="join-btn">
-              Join Meeting
-            </button>
+            <div className="action-buttons">
+              <button 
+                type="button" 
+                className="join-btn secondary" 
+                onClick={() => setJoinedRoom(Math.random().toString(36).substring(2, 8))}
+              >
+                Start New Meeting
+              </button>
+              <div className="divider">or</div>
+              <button type="submit" className="join-btn primary" disabled={!roomId.trim()}>
+                Join Meeting
+              </button>
+            </div>
           </form>
         </div>
       )}
     </div>
   );
 }
-import { createRoot } from 'react-dom/client';
-
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  createRoot(rootElement).render(<App />);
-}
-
 export default App;

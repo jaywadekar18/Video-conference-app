@@ -1,73 +1,57 @@
-# React + TypeScript + Vite
+# Peer-to-Peer Video Conference App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A lightweight, fully responsive 1-to-1 WebRTC video conferencing application. Built with **React** (Vite) on the frontend and **Node.js + Socket.IO** for the signaling backend.
 
-Currently, two official plugins are available:
+## Features
+- **True Peer-to-Peer**: Video and audio data is sent directly between users via WebRTC (`RTCPeerConnection`), ensuring minimum latency.
+- **Room-based Architecture**: Users can generate a random secure room code or join an existing meeting instantly.
+- **Media Controls**: Easily mute audio or turn off video streams during the call.
+- **Responsive Design**: Polished, dark-themed UI that perfectly scales to mobile devices and tablets.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech Stack
+- **Frontend**: React 19, Vite, TypeScript, Socket.IO Client
+- **Backend (Signaling Server)**: Node.js, Express, Socket.IO, TypeScript
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 Getting Started (Local Development)
 
-## Expanding the ESLint configuration
+Because this app involves both a frontend client and a backend signaling server, you need to run both simultaneously in **two separate terminal windows**.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 1. Start the Backend Server
+```bash
+cd server
+npm install
+npm run dev
 ```
+*(The backend will run on `http://localhost:3000`)*
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### 2. Start the Frontend Client
+Open a new terminal window:
+```bash
+npm install
+npm run dev
 ```
+*(The frontend will run on `http://localhost:5173`. Open this URL in two separate browser windows to test the connection locally)*
+
+---
+
+## 🌍 Deployment Guide
+
+To put this app live on the internet, you must host the frontend and backend on separate services.
+
+### Deploying the Backend (Render, Railway, Heroku)
+The `server` directory contains a persistent Node.js WebSockets server. It **cannot** be deployed to static hosts like Netlify. We recommend **Render.com**.
+1. Create a new Web Service on Render linked to this repository.
+2. **Root Directory**: `server`
+3. **Build Command**: `npm install && npm run build`
+4. **Start Command**: `npm start`
+5. *Once deployed, copy your live backend URL.*
+
+### Deploying the Frontend (Netlify, Vercel)
+The root directory can be hosted on any static site hosting service like Netlify.
+1. Create a new site from your Git repository on Netlify.
+2. **Build Command**: `npm run build`
+3. **Publish Directory**: `dist`
+4. **Environment Variables**: Add a new variable named `VITE_SERVER_URL` and set its value to your live backend URL (e.g., `https://my-video-backend.onrender.com`).
+5. Deploy!
