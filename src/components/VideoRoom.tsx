@@ -39,6 +39,7 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
   useEffect(() => {
     let unmounted = false;
@@ -76,6 +77,11 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
           console.log('Received offer from', payload.caller);
           const pc = createPeerConnection(payload.caller, stream);
           await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          
+          // Add any queued candidates now that remote description is set
+          pendingCandidates.current.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error));
+          pendingCandidates.current = [];
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           socket.emit('answer', { target: payload.caller, caller: socket.id, sdp: pc.localDescription });
@@ -86,13 +92,20 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
           const pc = peerConnectionRef.current;
           if (pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+            
+            // Add any queued candidates
+            pendingCandidates.current.forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error));
+            pendingCandidates.current = [];
           }
         });
 
         socket.on('ice-candidate', (payload: { candidate: RTCIceCandidateInit }) => {
           const pc = peerConnectionRef.current;
-          if (pc) {
-            pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(e => console.error(e));
+          if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+            pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(e => console.error('Failed adding ICE:', e));
+          } else {
+            console.log('Queuing ICE candidate (remote description not ready)');
+            pendingCandidates.current.push(payload.candidate);
           }
         });
 
@@ -106,6 +119,7 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
             peerConnectionRef.current.close();
             peerConnectionRef.current = null;
           }
+          pendingCandidates.current = [];
         });
 
       } catch (err) {
@@ -132,6 +146,8 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      // Force play to prevent mobile browser autoplay blocking
+      remoteVideoRef.current.play().catch(err => console.log('Autoplay blocked:', err));
     }
   }, [remoteStream]);
 
@@ -140,6 +156,9 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
+    
+    // Clear the pending queue for a fresh connection
+    pendingCandidates.current = [];
     
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
@@ -159,9 +178,6 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
 
     pc.ontrack = (event) => {
       setRemoteStream(event.streams[0]);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-      }
     };
 
     return pc;
