@@ -41,7 +41,8 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
           localVideoRef.current.srcObject = stream;
         }
 
-        const socket = io('http://localhost:3000');
+        const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+        const socket = io(serverUrl);
         socketRef.current = socket;
 
         socket.on('connect', () => {
