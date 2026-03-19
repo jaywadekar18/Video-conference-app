@@ -143,32 +143,42 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
     };
   }, [roomId]);
 
+  const [remoteTrackCount, setRemoteTrackCount] = useState(0);
+  const remoteStreamInstance = useRef<MediaStream>(new MediaStream());
+
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      // Force play to prevent mobile browser autoplay blocking
+    if (remoteVideoRef.current && remoteTrackCount > 0) {
+      console.log('Attaching latest tracks to video element...');
+      remoteVideoRef.current.srcObject = remoteStreamInstance.current;
       remoteVideoRef.current.play().catch(err => console.log('Autoplay blocked:', err));
     }
-  }, [remoteStream]);
+  }, [remoteTrackCount]);
 
   const createPeerConnection = (targetId: string, stream: MediaStream) => {
-    // Cleanup old connection if exists
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
     
-    // Clear the pending queue for a fresh connection
     pendingCandidates.current = [];
     
     const pc = new RTCPeerConnection(ICE_SERVERS);
     peerConnectionRef.current = pc;
 
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE Connection State changed to:', pc.iceConnectionState);
+    };
+    pc.onconnectionstatechange = () => {
+      console.log('WebRTC Connection State changed to:', pc.connectionState);
+    };
+
     stream.getTracks().forEach(track => {
+      console.log('Adding local track:', track.kind);
       pc.addTrack(track, stream);
     });
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('Gathered ICE Candidate, sending to target...');
         socketRef.current?.emit('ice-candidate', {
           target: targetId,
           candidate: event.candidate,
@@ -177,7 +187,10 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
     };
 
     pc.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
+      console.log('Received remote track from peer:', event.track.kind);
+      remoteStreamInstance.current.addTrack(event.track);
+      setRemoteTrackCount(prev => prev + 1);
+      setRemoteStream(remoteStreamInstance.current);
     };
 
     return pc;
