@@ -167,6 +167,27 @@
   transform: scaleX(-1); /* mirror local video */
 }
 
+.video-wrapper.local.screen video {
+  transform: none !important; /* DO NOT mirror screenshare */
+}
+
+.video-wrapper {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.video-wrapper.maximized {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+
 .video-label {
   position: absolute;
   bottom: 1rem;
@@ -241,6 +262,15 @@
 
 .control-btn.leave:hover {
   background: var(--danger-hover);
+}
+
+.control-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.control-btn.active:hover {
+  background: var(--accent-hover);
 }
 
 /* Mobile Responsiveness */
