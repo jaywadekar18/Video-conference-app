@@ -23,8 +23,147 @@ const ICE_SERVERS = {
   ]
 };
 
-// Subcomponent to reliably render dynamic streams
-const RemoteVideo = ({ stream }: { stream: MediaStream }) => {
+const AnnotationCanvas = ({ targetIdRef, streamId, socketRef }: { targetIdRef: React.MutableRefObject<string | null>, streamId: string, socketRef: React.MutableRefObject<Socket | null> }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isDrawing = useRef(false);
+  const colorRef = useRef('#' + Math.floor(Math.random()*16777215).toString(16)); 
+
+  useEffect(() => {
+    const handleResize = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    
+    const handleDraw = (payload: any) => {
+       if (payload.streamId !== streamId) return;
+       const canvas = canvasRef.current;
+       if (!canvas) return;
+       const ctx = canvas.getContext('2d');
+       if (!ctx) return;
+       
+       const x = payload.data.x * canvas.width;
+       const y = payload.data.y * canvas.height;
+
+       ctx.strokeStyle = payload.data.color;
+       ctx.lineWidth = 3;
+       ctx.lineCap = 'round';
+
+       if (payload.data.type === 'start') {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+       } else if (payload.data.type === 'move') {
+          ctx.lineTo(x, y);
+          ctx.stroke();
+       } else if (payload.data.type === 'clear') {
+          ctx.clearRect(0,0, canvas.width, canvas.height);
+       }
+    };
+    socket.on('draw', handleDraw);
+    return () => { socket.off('draw', handleDraw); };
+  }, [streamId, socketRef]);
+
+  const emitDraw = (type: string, x: number, y: number) => {
+    if (!targetIdRef.current || !socketRef.current) return;
+    socketRef.current.emit('draw', {
+      target: targetIdRef.current,
+      streamId,
+      data: { color: colorRef.current, type, x, y }
+    });
+  };
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    if ('touches' in e && (e as React.TouchEvent).touches.length > 0) {
+      clientX = (e as React.TouchEvent).touches[0].clientX;
+      clientY = (e as React.TouchEvent).touches[0].clientY;
+    } else {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    }
+    return {
+      x: (clientX - rect.left) / rect.width,
+      y: (clientY - rect.top) / rect.height
+    };
+  };
+
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    isDrawing.current = true;
+    const { x, y } = getPos(e);
+    emitDraw('start', x, y);
+    
+    const ctx = canvasRef.current?.getContext('2d');
+    if (ctx && canvasRef.current) {
+       ctx.beginPath();
+       ctx.moveTo(x * canvasRef.current.width, y * canvasRef.current.height);
+    }
+  };
+
+  const moveDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (!isDrawing.current) return;
+    const { x, y } = getPos(e);
+    emitDraw('move', x, y);
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (ctx && canvas) {
+       ctx.lineTo(x * canvas.width, y * canvas.height);
+       ctx.strokeStyle = colorRef.current;
+       ctx.lineWidth = 3;
+       ctx.lineCap = 'round';
+       ctx.stroke();
+    }
+  };
+
+  const endDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    emitDraw('end', 0, 0);
+  };
+  
+  const clearDraw = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    emitDraw('clear', 0, 0);
+    const canvas = canvasRef.current;
+    if (canvas) canvas.getContext('2d')?.clearRect(0,0, canvas.width, canvas.height);
+  };
+
+  return (
+    <>
+      <canvas
+        ref={canvasRef}
+        className="annotation-canvas"
+        onMouseDown={startDraw}
+        onMouseMove={moveDraw}
+        onMouseUp={endDraw}
+        onMouseOut={endDraw}
+        onTouchStart={startDraw}
+        onTouchMove={moveDraw}
+        onTouchEnd={endDraw}
+      />
+      <button className="clear-btn" onClick={clearDraw}>Clear</button>
+    </>
+  );
+};
+
+
+const RemoteVideo = ({ stream, targetIdRef, socketRef }: { stream: MediaStream, targetIdRef: React.MutableRefObject<string | null>, socketRef: React.MutableRefObject<Socket | null> }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isMaximized, setIsMaximized] = useState(false);
   
@@ -37,13 +176,17 @@ const RemoteVideo = ({ stream }: { stream: MediaStream }) => {
   }, [stream]);
 
   return (
-    <div 
-      className={`video-wrapper remote ${isMaximized ? 'maximized' : ''}`}
-      onClick={() => setIsMaximized(!isMaximized)}
-      title="Click to maximize/minimize"
-    >
+    <div className={`video-wrapper remote ${isMaximized ? 'maximized' : ''}`}>
+      <div className="maximize-btn" onClick={(e) => { e.stopPropagation(); setIsMaximized(!isMaximized); }}>
+        {isMaximized ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        )}
+      </div>
       <video ref={videoRef} autoPlay playsInline />
       <div className="video-label">Remote Stream</div>
+      <AnnotationCanvas targetIdRef={targetIdRef} streamId={stream.id} socketRef={socketRef} />
     </div>
   );
 };
@@ -260,7 +403,6 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
         displayStream.getTracks().forEach(t => {
           peerConnectionRef.current?.addTrack(t, displayStream);
           t.onended = () => {
-            // Un-share when stopped natively or from browser bar
             const sender = peerConnectionRef.current?.getSenders().find(s => s.track === t);
             if (sender) peerConnectionRef.current?.removeTrack(sender);
             localScreenStreamRef.current = null;
@@ -304,28 +446,40 @@ export const VideoRoom: React.FC<VideoRoomProps> = ({ roomId, onLeave }) => {
       </header>
       
       <div className="videos-container">
-        <div 
-          className={`video-wrapper local ${maximizedId === 'local' ? 'maximized' : ''}`}
-          onClick={() => setMaximizedId(prev => prev === 'local' ? null : 'local')}
-          title="Click to maximize/minimize"
-        >
+        <div className={`video-wrapper local ${maximizedId === 'local' ? 'maximized' : ''}`}>
+          <div className="maximize-btn" onClick={(e) => { e.stopPropagation(); setMaximizedId(prev => prev === 'local' ? null : 'local'); }}>
+            {maximizedId === 'local' ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            )}
+          </div>
           <video ref={localVideoRef} autoPlay playsInline muted className={isVideoMuted ? 'muted' : ''} />
           <div className="video-label">You {isAudioMuted ? '(Muted)' : ''}</div>
+          {localStreamRef.current && (
+            <AnnotationCanvas targetIdRef={targetIdRef} streamId={localStreamRef.current.id} socketRef={socketRef} />
+          )}
         </div>
 
         {isScreenSharing && (
-          <div 
-            className={`video-wrapper local screen ${maximizedId === 'screen' ? 'maximized' : ''}`}
-            onClick={() => setMaximizedId(prev => prev === 'screen' ? null : 'screen')}
-            title="Click to maximize/minimize"
-          >
+          <div className={`video-wrapper local screen ${maximizedId === 'screen' ? 'maximized' : ''}`}>
+            <div className="maximize-btn" onClick={(e) => { e.stopPropagation(); setMaximizedId(prev => prev === 'screen' ? null : 'screen'); }}>
+              {maximizedId === 'screen' ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              )}
+            </div>
             <video ref={localScreenVideoRef} autoPlay playsInline muted />
             <div className="video-label">Your Screen</div>
+            {localScreenStreamRef.current && (
+              <AnnotationCanvas targetIdRef={targetIdRef} streamId={localScreenStreamRef.current.id} socketRef={socketRef} />
+            )}
           </div>
         )}
         
         {remoteStreams.map((stream, idx) => (
-          <RemoteVideo key={stream.id || idx} stream={stream} />
+          <RemoteVideo key={stream.id || idx} stream={stream} targetIdRef={targetIdRef} socketRef={socketRef} />
         ))}
 
         {remoteStreams.length === 0 && (

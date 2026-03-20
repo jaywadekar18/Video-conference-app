@@ -47,6 +47,11 @@ io.on('connection', (socket: Socket) => {
   socket.on('ice-candidate', (payload: { target: string, candidate: any }) => {
     io.to(payload.target).emit('ice-candidate', payload);
   });
+
+  // Relay drawing coordinates
+  socket.on('draw', (payload: { target: string, streamId: string, data: any }) => {
+    io.to(payload.target).emit('draw', payload);
+  });
 });
 
 server.listen(PORT, () => {
